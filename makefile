@@ -13,4 +13,4 @@ system: system.cpp
 	$(CC) $(CC_ARGS) system.cpp -o system
 
 clean:
-	rm -rf *.o *.out main switch system
+	rm -rf *.o *.out main switch system fifo_*
