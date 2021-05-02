@@ -82,7 +82,7 @@ void main_command_handler(string message_data , Port2Addr& port_to_addr ,
         res += ", pipe_name = " + pipe_name;
         res += ")";
 
-        cout << res << endl;
+        //cout << res << endl;
     }
 
 }
