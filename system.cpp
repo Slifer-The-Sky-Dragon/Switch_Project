@@ -29,19 +29,17 @@ int main(int argc , char* argv[]) {
     int system_fd = open(system_name_pipe.c_str() , O_RDONLY | O_NONBLOCK);
 
     if(system_fd < 0){
-        cout << "RIDY" << endl;
+        cout << "Error in opening name pipe..." << endl;
+        exit(0);
     }
-
-    cout << "I'm here" << endl;
 
     fd_set read_fds;
     while(true){
         FD_ZERO(&read_fds);
         FD_SET(system_fd , &read_fds);
         int res = select(system_fd + 1 , &read_fds , NULL , NULL , NULL);
-        cout << "salam" << endl;
         if(res < 0)
-            cout << "Error occured..." << endl;
+            cout << "Error occured in select..." << endl;
         
         if(FD_ISSET(system_fd , &read_fds)){
             char message[MESSAGE_SIZE];
