@@ -75,16 +75,18 @@ string convert_to_ehternet_frame(int da , int sa , string message_type , string 
     return result;
 }
 
-void main_command_handler(string message_data , int& switch_pipe_fd){
+void main_command_handler(string message_data , int& system_write_pipe_fd , int& system_read_pipe_fd){
     stringstream ss(message_data);
     string command;
     ss >> command;
 
     if(command == "C"){
-        string pipe_name;
-        ss >> pipe_name;
-        switch_pipe_fd = open(pipe_name.c_str(), O_RDWR);
-        if(switch_pipe_fd < 0){
+        string pipe_name1 , pipe_name2;
+        ss >> pipe_name1 >> pipe_name2;
+        system_write_pipe_fd = open(pipe_name1.c_str(), O_WRONLY);
+        system_read_pipe_fd = open(pipe_name2.c_str(), O_RDONLY | O_NONBLOCK);
+        
+        if(system_write_pipe_fd < 0 || system_read_pipe_fd < 0){
             perror("open");
             abort();
         }
@@ -92,18 +94,28 @@ void main_command_handler(string message_data , int& switch_pipe_fd){
         string res = "";
         res += system_info();
         res += ": Connected to switch ";
-        res += "(pipe_name = " + pipe_name;
+        res += "(write_pipe_name = " + pipe_name1;
+        res += ", read_pipe_name = " + pipe_name2;
         res += ")";
         cout << res << endl;
     }
 
     if(command == "S"){
         int da;
-        string message_body;
+        string message_body = EMPTY;
         ss >> da;
-        getline(ss, message_body);
+
+        string line;
+        bool check = false;
+        while(ss >> line){
+            if(check == true)
+                message_body += " ";
+            message_body += line;
+            check = true;
+        }
+        
         string frame = convert_to_ehternet_frame(da , system_id , MESSAGE_TYPE , message_body);
-        write(switch_pipe_fd , frame.c_str() , frame.size());
+        write(system_write_pipe_fd , frame.c_str() , frame.size());
         
         string res = "";
         res += system_info();
@@ -136,16 +148,16 @@ void message_command_handler(int da , int sa , string message_data){
 }
 
 void system_command_handler(int da , int sa , string message_type ,
-                            string message_data , int& switch_pipe_fd){
+                            string message_data , int& system_write_pipe_fd , int& system_read_pipe_fd){
 
     if(message_type == MAIN_TYPE)
-        main_command_handler(message_data , switch_pipe_fd);
+        main_command_handler(message_data , system_write_pipe_fd , system_read_pipe_fd);
 
     if(message_type == MESSAGE_TYPE)
         message_command_handler(da , sa , message_data);
 }
 
-void ethernet_frame_decoder(string message , int& switch_pipe_fd){
+void ethernet_frame_decoder(string message , int& system_write_pipe_fd , int& system_read_pipe_fd){
     int da = find_int_value(message , DA_IND , DA_SA_LEN);
     int sa = find_int_value(message , SA_IND , DA_SA_LEN);
 
@@ -154,14 +166,15 @@ void ethernet_frame_decoder(string message , int& switch_pipe_fd){
     message_type += message[SA_IND + DA_SA_LEN + 1];
 
     string message_data = find_message_data(message);
-    system_command_handler(da , sa , message_type , message_data , switch_pipe_fd);
+    system_command_handler(da , sa , message_type , message_data , system_write_pipe_fd , system_read_pipe_fd);
 }
 
 int main(int argc , char* argv[]) {
     cout << "New System has been created..." << endl;
 
     system_id = atoi(argv[SYSTEM_ID]);
-    int switch_pipe_fd = -1;
+    int system_write_pipe_fd = -1;
+    int system_read_pipe_fd = -1;
 
     string system_name_pipe = "fifo_mss" + to_string(system_id);
     int system_fd = open(system_name_pipe.c_str() , O_RDONLY | O_NONBLOCK);
@@ -175,6 +188,7 @@ int main(int argc , char* argv[]) {
     while(true){
         FD_ZERO(&read_fds);
         FD_SET(system_fd , &read_fds);
+        FD_SET(system_read_pipe_fd , &read_fds);
         int res = select(system_fd + 1 , &read_fds , NULL , NULL , NULL);
         if(res < 0)
             cout << "Error occured in select..." << endl;
@@ -183,8 +197,15 @@ int main(int argc , char* argv[]) {
             char message[MESSAGE_SIZE];
             bzero(message , MESSAGE_SIZE);
             read(system_fd , message , MESSAGE_SIZE);
-            // cout << string(message) << endl;
-            ethernet_frame_decoder(string(message), switch_pipe_fd);
+            cout << string(message) << endl;
+            ethernet_frame_decoder(string(message), system_write_pipe_fd , system_read_pipe_fd);
+        }
+        if(FD_ISSET(system_read_pipe_fd , &read_fds)){
+            char message[MESSAGE_SIZE];
+            bzero(message , MESSAGE_SIZE);
+            read(system_read_pipe_fd , message , MESSAGE_SIZE);
+            cout << string(message) << endl;
+            ethernet_frame_decoder(string(message), system_write_pipe_fd , system_read_pipe_fd);
         }
     }
 }

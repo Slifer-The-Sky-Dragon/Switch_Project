@@ -24,6 +24,7 @@
 #define NEW_SYSTEM "MySystem"
 #define CONNECT_SWITCH_SYSTEM "ConnectSwitchSystem"
 #define CONNECT_SWITCH_SWITCH "ConnectSwitchSwitch"
+#define SEND_MESSAGE "SendMessage"
 
 char SWITCH_EXEC[] = { "./switch" };
 char SYSTEM_EXEC[] = { "./system" };
@@ -109,11 +110,14 @@ void connect_switch_system_command_handler(stringstream& ss , map < string , int
     int system_id , switch_id , port_number;
     ss >> system_id >> switch_id >> port_number;
 
-    string pipe_name = FIFO_PREFIX + "s" + to_string(switch_id) + "ss" + to_string(system_id);
-    mkfifo(pipe_name.c_str() , 0666);
+    string pipe_name1 = FIFO_PREFIX + "s" + to_string(switch_id) + "ss" + to_string(system_id);
+    string pipe_name2 = FIFO_PREFIX + "ss" + to_string(system_id) + "s" + to_string(switch_id);
+    
+    mkfifo(pipe_name1.c_str() , 0666);
+    mkfifo(pipe_name2.c_str() , 0666);
 
-    string switch_data = "C " + to_string(port_number) + " " + pipe_name;
-    string system_data = "C " + pipe_name;
+    string switch_data = "C " + to_string(port_number) + " " + pipe_name1 + " " + pipe_name2;
+    string system_data = "C " + pipe_name2 + " " + pipe_name1;
 
     string switch_message = convert_to_ehternet_frame(0 , 0 , MAIN_MESSAGE , switch_data);
     string system_message = convert_to_ehternet_frame(0 , 0 , MAIN_MESSAGE , system_data);
@@ -131,11 +135,14 @@ void connect_switch_switch_command_handler(stringstream& ss , map < string , int
     int switch_id1, switch_id2 , port_number1 , port_number2;
     ss >> switch_id1 >> port_number1 >> switch_id2 >> port_number2;
 
-    string pipe_name = FIFO_PREFIX + "s" + to_string(switch_id1) + "s" + to_string(switch_id2);
-    mkfifo(pipe_name.c_str() , 0666);
+    string pipe_name1 = FIFO_PREFIX + "s" + to_string(switch_id1) + "s" + to_string(switch_id2);
+    string pipe_name2 = FIFO_PREFIX + "s" + to_string(switch_id2) + "s" + to_string(switch_id1);   
+    
+    mkfifo(pipe_name1.c_str() , 0666);
+    mkfifo(pipe_name2.c_str() , 0666);
 
-    string switch_data1 = "C " + to_string(port_number1) + " " + pipe_name;
-    string switch_data2 = "C " + to_string(port_number2) + " " + pipe_name;
+    string switch_data1 = "C " + to_string(port_number1) + " " + pipe_name1 + " " + pipe_name2;
+    string switch_data2 = "C " + to_string(port_number2) + " " + pipe_name2 + " " + pipe_name1;
 
     string switch_message1 = convert_to_ehternet_frame(0 , 0 , MAIN_MESSAGE , switch_data1);
     string switch_message2 = convert_to_ehternet_frame(0 , 0 , MAIN_MESSAGE , switch_data2);
@@ -147,6 +154,21 @@ void connect_switch_switch_command_handler(stringstream& ss , map < string , int
         write(fifo_to_fd[switch_pipe_name1] , switch_message1.c_str() , switch_message1.size());
         write(fifo_to_fd[switch_pipe_name2] , switch_message2.c_str() , switch_message2.size());
     }    
+}
+
+void send_message_command_handler(stringstream& ss , map < string , int >& fifo_to_fd){
+    int system_id1 , system_id2;
+    string raw_message;
+
+    ss >> system_id1 >> system_id2 >> raw_message;
+
+    string system_data = "S " + to_string(system_id2) + " " + raw_message;
+    string system_message = convert_to_ehternet_frame(0 , 0 , MAIN_MESSAGE , system_data);;
+    string system_pipe_name = FIFO_PREFIX + "mss" + to_string(system_id1);   
+
+    if(fifo_to_fd.find(system_pipe_name) != fifo_to_fd.end()){
+        write(fifo_to_fd[system_pipe_name] , system_message.c_str() , system_message.size());
+    }
 }
 
 void command_handler(string command , 
@@ -165,6 +187,8 @@ void command_handler(string command ,
         connect_switch_system_command_handler(ss , fifo_to_fd);
     else if(command_type == CONNECT_SWITCH_SWITCH)
         connect_switch_switch_command_handler(ss , fifo_to_fd);
+    else if(command_type == SEND_MESSAGE)
+        send_message_command_handler(ss , fifo_to_fd);
 }
 
 int main(){

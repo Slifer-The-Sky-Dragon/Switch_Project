@@ -35,7 +35,7 @@ const int MAX_PORT_CNT = 100;
 typedef enum {EXEC_NAME , PORT_CNT, SWITCH_ID} Argv_Indexes;
 
 typedef map < int , int > Sys2Port;
-typedef map < int , int > Port2Addr;
+typedef map < int , int > Port2Fd;
 typedef vector < int > FdVec;
 
 int switch_id;
@@ -56,33 +56,41 @@ string find_message_data(string message){
     return result;
 }
 
-void main_command_handler(string message_data , Port2Addr& port_to_addr ,
-                        Sys2Port& system_to_port , FdVec& all_fd){
-    // cout << "main_command_handler::raw_message: " << message_data << endl;
-    
+
+void main_command_handler(string message_data , Port2Fd& port_to_write_fd ,
+                        Sys2Port& system_to_port , FdVec& all_read_fd , FdVec& all_write_fd , 
+                        map < int , int >& read_fd_to_write_fd){
+
     stringstream ss(message_data);
     string command;
     ss >> command;
 
     if (command == "C"){
         int port_number;
-        string pipe_name;
-        ss >> port_number >> pipe_name;
+        string pipe_name1 , pipe_name2;
+        ss >> port_number >> pipe_name1 >> pipe_name2;
 
-        int pipe_fd = open(pipe_name.c_str(), O_RDWR);
-        if(pipe_fd < 0){
+        int switch_read_fd = open(pipe_name2.c_str(), O_RDONLY | O_NONBLOCK);
+
+        int switch_write_fd = open(pipe_name1.c_str(), O_WRONLY);
+
+        if(switch_write_fd < 0 || switch_read_fd < 0){
             perror("open");
             abort();
         }
 
-        port_to_addr[port_number] = pipe_fd;
-        all_fd.push_back(pipe_fd);
+        port_to_write_fd[port_number] = switch_write_fd;
+        all_write_fd.push_back(switch_write_fd);
+        all_read_fd.push_back(switch_read_fd);
+
+        read_fd_to_write_fd[switch_read_fd] = switch_write_fd;
 
         string res = "SWITCH";
         res += "(ID = " + to_string(switch_id) + ")";
         res += ": Added connection ";
         res += "(port = " + to_string(port_number);
-        res += ", pipe_name = " + pipe_name;
+        res += ", write_pipe_name = " + pipe_name1;
+        res += ", read_pipe_name = " + pipe_name2;
         res += ")";
 
         cout << res << endl;
@@ -90,34 +98,39 @@ void main_command_handler(string message_data , Port2Addr& port_to_addr ,
 
 }
 
-void message_command_handler(string raw_message , int received_fd, int main_switch_fd, int da, int sa , string message_data , Port2Addr& port_to_addr ,
-                            Sys2Port& system_to_port , FdVec& all_fd){
+void message_command_handler(string raw_message , int received_fd, int main_switch_fd, int da, int sa , string message_data , 
+                            Port2Fd& port_to_write_fd , Sys2Port& system_to_write_port , FdVec& all_read_fd,
+                            FdVec& all_write_fd , map < int , int >& read_fd_to_write_fd){
 
-    system_to_port[sa] = received_fd;
-    if(system_to_port.find(da) != system_to_port.end()){
-        int dest_port = system_to_port[da];
-        write(port_to_addr[dest_port] , raw_message.c_str() , raw_message.size());
+    system_to_write_port[sa] = read_fd_to_write_fd[received_fd];
+
+    if(system_to_write_port.find(da) != system_to_write_port.end()){
+        int dest_write_fd = system_to_write_port[da];
+        write(dest_write_fd , raw_message.c_str() , raw_message.size());
     }
     else{
-        for(int i = 0 ; i < all_fd.size() ; i++){
-            if(all_fd[i] == main_switch_fd || all_fd[i] == received_fd)
+        for(int i = 0 ; i < all_write_fd.size() ; i++){
+            if(all_write_fd[i] == read_fd_to_write_fd[received_fd])
                 continue;
-            write(all_fd[i] , raw_message.c_str() , raw_message.size());
+            write(all_write_fd[i] , raw_message.c_str() , raw_message.size());
         }
     }
 }
 
 void switch_command_handler(int received_fd, int main_switch_fd, string raw_message, int da, int sa , string message_type ,
-                            string message_data , Port2Addr& port_to_addr ,
-                            Sys2Port& system_to_port , FdVec& all_fd){
+                            string message_data , Port2Fd& port_to_write_fd ,
+                            Sys2Port& system_to_port , FdVec& all_read_fd , FdVec& all_write_fd, 
+                            map < int , int >& read_fd_to_write_fd){
     if(message_type == MAIN_TYPE)
-        main_command_handler(message_data, port_to_addr, system_to_port, all_fd);
+        main_command_handler(message_data, port_to_write_fd, system_to_port, all_read_fd , all_write_fd , read_fd_to_write_fd);
     if(message_type == MESSAGE_TYPE)
-        message_command_handler(raw_message , received_fd , main_switch_fd , da , sa , message_data , port_to_addr , system_to_port , all_fd);
+        message_command_handler(raw_message , received_fd , main_switch_fd , da , sa , message_data , port_to_write_fd ,
+                                 system_to_port , all_read_fd , all_write_fd , read_fd_to_write_fd);
 }
 
-void ethernet_frame_decoder(string message, int received_fd, int main_switch_fd, Port2Addr& port_to_addr ,
-                            Sys2Port& system_to_port , FdVec& all_fd){
+void ethernet_frame_decoder(string message, int received_fd, int main_switch_fd, Port2Fd& port_to_write_fd ,
+                            Sys2Port& system_to_port , FdVec& all_read_fd , FdVec& all_write_fd , 
+                            map < int , int >& read_fd_to_write_fd){
     int da = find_int_value(message , DA_IND , DA_SA_LEN);
     int sa = find_int_value(message , SA_IND , DA_SA_LEN);
 
@@ -127,7 +140,7 @@ void ethernet_frame_decoder(string message, int received_fd, int main_switch_fd,
 
     string message_data = find_message_data(message);
     switch_command_handler(received_fd , main_switch_fd , message , da , sa , message_type , message_data ,
-                        port_to_addr , system_to_port , all_fd);
+                            port_to_write_fd , system_to_port , all_read_fd , all_write_fd , read_fd_to_write_fd);
 }
 
 int main(int argc , char* argv[]) {
@@ -135,9 +148,11 @@ int main(int argc , char* argv[]) {
     
     cout << "New Switch has been created..." << endl;
 
-    Port2Addr port_to_addr;
+    Port2Fd port_to_write_fd;
     Sys2Port system_to_port;
-    FdVec all_fd;
+    FdVec all_read_fd;
+    FdVec all_write_fd;
+    map < int , int > read_fd_to_write_fd;
     
     int switch_id = atoi(argv[SWITCH_ID]);
     int port_cnt = atoi(argv[PORT_CNT]);
@@ -149,26 +164,29 @@ int main(int argc , char* argv[]) {
         cout << "Error in opening name pipe..." << endl;
         exit(0);
     }
-    all_fd.push_back(main_switch_fd);
+    all_read_fd.push_back(main_switch_fd);
 
     fd_set read_fds;
     while(true){
         FD_ZERO(&read_fds);
         int max_fd = -1;
-        for(int i = 0 ; i < all_fd.size() ; i++){
-            FD_SET(all_fd[i] , &read_fds);
-            max_fd = max(all_fd[i] , max_fd);
+        for(int i = 0 ; i < all_read_fd.size() ; i++){
+            FD_SET(all_read_fd[i] , &read_fds);
+            max_fd = max(all_read_fd[i] , max_fd);
         }
+        cout << "hi" << endl;
         int res = select(max_fd + 1 , &read_fds , NULL , NULL , NULL);
         if(res < 0)
             cout << "Error occured in select..." << endl;
         
-        for(int i = 0 ; i < all_fd.size() ; i++){
-            if(FD_ISSET(all_fd[i] , &read_fds)){
+        for(int i = 0 ; i < all_read_fd.size() ; i++){
+            if(FD_ISSET(all_read_fd[i] , &read_fds)){
                 char message[MESSAGE_SIZE];
                 bzero(message , MESSAGE_SIZE);
-                read(all_fd[i] , message , MESSAGE_SIZE);
-                ethernet_frame_decoder(string(message), all_fd[i] , main_switch_fd , port_to_addr , system_to_port , all_fd);
+                read(all_read_fd[i] , message , MESSAGE_SIZE);
+                cout << string(message) << endl;
+                ethernet_frame_decoder(string(message), all_read_fd[i] , main_switch_fd , port_to_write_fd , 
+                                        system_to_port , all_read_fd , all_write_fd , read_fd_to_write_fd);
             }
         }
     }
