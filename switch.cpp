@@ -11,6 +11,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <map>
+#include <algorithm>
 
 using namespace std;
 
@@ -19,6 +20,8 @@ using namespace std;
 #define MESSAGE_TYPE "01"
 #define FILE_TYPE "10"
 #define CONFIG_TYPE "11"
+
+#define SFD "$"
 
 #define NOT_DEFINED -1
 #define DA_IND 1
@@ -87,14 +90,33 @@ void main_command_handler(string message_data , Port2Addr& port_to_addr ,
 
 }
 
-void switch_command_handler(int da, int sa , string message_type ,
+void message_command_handler(string raw_message , int received_fd, int main_switch_fd, int da, int sa , string message_data , Port2Addr& port_to_addr ,
+                            Sys2Port& system_to_port , FdVec& all_fd){
+
+    system_to_port[sa] = received_fd;
+    if(system_to_port.find(da) != system_to_port.end()){
+        int dest_port = system_to_port[da];
+        write(port_to_addr[dest_port] , raw_message.c_str() , raw_message.size());
+    }
+    else{
+        for(int i = 0 ; i < all_fd.size() ; i++){
+            if(all_fd[i] == main_switch_fd || all_fd[i] == received_fd)
+                continue;
+            write(all_fd[i] , raw_message.c_str() , raw_message.size());
+        }
+    }
+}
+
+void switch_command_handler(int received_fd, int main_switch_fd, string raw_message, int da, int sa , string message_type ,
                             string message_data , Port2Addr& port_to_addr ,
                             Sys2Port& system_to_port , FdVec& all_fd){
     if(message_type == MAIN_TYPE)
         main_command_handler(message_data, port_to_addr, system_to_port, all_fd);
+    if(message_type == MESSAGE_TYPE)
+        message_command_handler(raw_message , received_fd , main_switch_fd , da , sa , message_data , port_to_addr , system_to_port , all_fd);
 }
 
-void ethernet_frame_decoder(string message, Port2Addr& port_to_addr ,
+void ethernet_frame_decoder(string message, int received_fd, int main_switch_fd, Port2Addr& port_to_addr ,
                             Sys2Port& system_to_port , FdVec& all_fd){
     int da = find_int_value(message , DA_IND , DA_SA_LEN);
     int sa = find_int_value(message , SA_IND , DA_SA_LEN);
@@ -104,7 +126,7 @@ void ethernet_frame_decoder(string message, Port2Addr& port_to_addr ,
     message_type += message[SA_IND + DA_SA_LEN + 1];
 
     string message_data = find_message_data(message);
-    switch_command_handler(da , sa , message_type , message_data ,
+    switch_command_handler(received_fd , main_switch_fd , message , da , sa , message_type , message_data ,
                         port_to_addr , system_to_port , all_fd);
 }
 
@@ -121,27 +143,33 @@ int main(int argc , char* argv[]) {
     int port_cnt = atoi(argv[PORT_CNT]);
 
     string switch_name_pipe = "fifo_ms" + to_string(switch_id);
-    int switch_fd = open(switch_name_pipe.c_str() , O_RDONLY | O_NONBLOCK);
+    int main_switch_fd = open(switch_name_pipe.c_str() , O_RDONLY | O_NONBLOCK);
 
-    if(switch_fd < 0){
+    if(main_switch_fd < 0){
         cout << "Error in opening name pipe..." << endl;
         exit(0);
     }
+    all_fd.push_back(main_switch_fd);
 
     fd_set read_fds;
     while(true){
         FD_ZERO(&read_fds);
-        FD_SET(switch_fd , &read_fds);
-        int res = select(switch_fd + 1 , &read_fds , NULL , NULL , NULL);
+        int max_fd = -1;
+        for(int i = 0 ; i < all_fd.size() ; i++){
+            FD_SET(all_fd[i] , &read_fds);
+            max_fd = max(all_fd[i] , max_fd);
+        }
+        int res = select(max_fd + 1 , &read_fds , NULL , NULL , NULL);
         if(res < 0)
             cout << "Error occured in select..." << endl;
         
-        if(FD_ISSET(switch_fd , &read_fds)){
-            char message[MESSAGE_SIZE];
-            bzero(message , MESSAGE_SIZE);
-            read(switch_fd , message , MESSAGE_SIZE);
-            // cout << "SWITCH (ID = " << switch_id << "): received message: " << string(message);
-            ethernet_frame_decoder(string(message), port_to_addr , system_to_port , all_fd);
+        for(int i = 0 ; i < all_fd.size() ; i++){
+            if(FD_ISSET(all_fd[i] , &read_fds)){
+                char message[MESSAGE_SIZE];
+                bzero(message , MESSAGE_SIZE);
+                read(all_fd[i] , message , MESSAGE_SIZE);
+                ethernet_frame_decoder(string(message), all_fd[i] , main_switch_fd , port_to_addr , system_to_port , all_fd);
+            }
         }
     }
 }
