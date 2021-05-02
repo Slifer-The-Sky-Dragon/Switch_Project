@@ -58,14 +58,6 @@ string find_message_data(string message){
     return result;
 }
 
-string convert_to_message_type(int type){
-    if(type == MAIN_MESSAGE){
-        return "00";
-    }
-    else
-        return "01";
-}
-
 string extend_string_length(string a , int final_length){
     string result;
     for(int i = 0 ; i < final_length - a.size() ; i++){
@@ -75,9 +67,8 @@ string extend_string_length(string a , int final_length){
     return result;
 }
 
-string convert_to_ehternet_frame(int da , int sa , int type , string data){
+string convert_to_ehternet_frame(int da , int sa , string message_type , string data){
     string result = EMPTY;
-    string message_type = convert_to_message_type(type);
 
     result = SFD + extend_string_length(to_string(da) , 6) + extend_string_length(to_string(sa) , 6) +
                          message_type + data + "\n";
@@ -111,13 +102,13 @@ void main_command_handler(string message_data , int& switch_pipe_fd){
         string message_body;
         ss >> da;
         getline(ss, message_body);
-        string frame = convert_to_ehternet_frame(da , system_id , SYSTEM_MESSAGE , message_body);
+        string frame = convert_to_ehternet_frame(da , system_id , MESSAGE_TYPE , message_body);
         write(switch_pipe_fd , frame.c_str() , frame.size());
         
         string res = "";
         res += system_info();
         res += ": Sent message ";
-        res += "(dest = " + da;
+        res += "(dest = " + to_string(da);
         res += ", message = \"" + message_body + "\")";
     
         cout << res << endl;
