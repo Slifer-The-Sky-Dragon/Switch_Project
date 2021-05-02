@@ -35,6 +35,8 @@ using namespace std;
 const string FIFO_PREFIX = "fifo_";
 typedef string ID;
 
+vector<int> children;
+
 void new_switch_command_handler(stringstream& ss , vector<ID>& switch_indexes , map < string , int >& fifo_to_fd){
     string port_cnt , switch_id;
     ss >> port_cnt >> switch_id;
@@ -55,6 +57,7 @@ void new_switch_command_handler(stringstream& ss , vector<ID>& switch_indexes , 
         int new_fd = open(fifo_name.c_str() , O_WRONLY);
         fifo_to_fd[fifo_name] = new_fd;
         switch_indexes.push_back(switch_id);
+        children.push_back(pid);
     }
 }
 
@@ -77,6 +80,7 @@ void new_system_command_handler(stringstream& ss , vector<ID>& system_indexes , 
         int new_fd = open(fifo_name.c_str() , O_WRONLY);
         fifo_to_fd[fifo_name] = new_fd;
         system_indexes.push_back(system_id);
+        children.push_back(pid);
     }
 }
 
@@ -88,9 +92,9 @@ string convert_to_message_type(int type){
         return "01";
 }
 
-string extend_string_length(string a , int final_length){
+string extend_string_length(string a , size_t final_length){
     string result;
-    for(int i = 0 ; i < final_length - a.size() ; i++){
+    for(size_t i = 0 ; i < final_length - a.size() ; i++){
         result += "0";
     }
     result += a;
@@ -160,7 +164,8 @@ void send_message_command_handler(stringstream& ss , map < string , int >& fifo_
     int system_id1 , system_id2;
     string raw_message;
 
-    ss >> system_id1 >> system_id2 >> raw_message;
+    ss >> system_id1 >> system_id2;
+    getline(ss, raw_message);
 
     string system_data = "S " + to_string(system_id2) + " " + raw_message;
     string system_message = convert_to_ehternet_frame(0 , 0 , MAIN_MESSAGE , system_data);;
@@ -199,4 +204,7 @@ int main(){
     while(getline(cin , command)){
         command_handler(command, switch_indexes, system_indexes , fifo_to_fd);
     }
+
+    for (auto c: children)
+        kill(c, SIGKILL);
 }

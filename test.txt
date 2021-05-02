@@ -1,7 +1,10 @@
 MySystem 1
 MySystem 2
 MySystem 3
-MySwitch 12 6
-ConnectSwitchSystem 1 6 1
-ConnectSwitchSystem 2 6 2
-ConnectSwitchSystem 3 6 3
+MySwitch 10 4
+MySwitch 10 5
+ConnectSwitchSystem 1 4 1
+ConnectSwitchSystem 2 5 2
+ConnectSwitchSystem 3 5 3
+ConnectSwitchSwitch 4 4 5 5
+SendMessage 1 2 salam haji!

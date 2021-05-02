@@ -58,9 +58,9 @@ string find_message_data(string message){
     return result;
 }
 
-string extend_string_length(string a , int final_length){
+string extend_string_length(string a , size_t final_length){
     string result;
-    for(int i = 0 ; i < final_length - a.size() ; i++){
+    for(size_t i = 0 ; i < final_length - a.size() ; i++){
         result += "0";
     }
     result += a;
@@ -83,8 +83,8 @@ void main_command_handler(string message_data , int& system_write_pipe_fd , int&
     if(command == "C"){
         string pipe_name1 , pipe_name2;
         ss >> pipe_name1 >> pipe_name2;
-        system_write_pipe_fd = open(pipe_name1.c_str(), O_WRONLY);
-        system_read_pipe_fd = open(pipe_name2.c_str(), O_RDONLY | O_NONBLOCK);
+        system_read_pipe_fd = open(pipe_name2.c_str(), O_RDWR);
+        system_write_pipe_fd = open(pipe_name1.c_str(), O_RDWR);
         
         if(system_write_pipe_fd < 0 || system_read_pipe_fd < 0){
             perror("open");
@@ -94,8 +94,8 @@ void main_command_handler(string message_data , int& system_write_pipe_fd , int&
         string res = "";
         res += system_info();
         res += ": Connected to switch ";
-        res += "(write_pipe_name = " + pipe_name1;
-        res += ", read_pipe_name = " + pipe_name2;
+        res += "(read_fd = " + to_string(system_read_pipe_fd);
+        res += ", write_fd = " + to_string(system_write_pipe_fd);
         res += ")";
         cout << res << endl;
     }
@@ -120,7 +120,8 @@ void main_command_handler(string message_data , int& system_write_pipe_fd , int&
         string res = "";
         res += system_info();
         res += ": Sent message ";
-        res += "(dest = " + to_string(da);
+        res += "(write_fd = " + to_string(system_write_pipe_fd);
+        res += ", dest = " + to_string(da);
         res += ", message = \"" + message_body + "\")";
     
         cout << res << endl;
@@ -140,7 +141,7 @@ void message_command_handler(int da , int sa , string message_data){
     string res = "";
     res += system_info();
     res += ": Received message ";
-    res += " (source = " + to_string(sa);
+    res += "(source = " + to_string(sa);
     res += ", dest = " + to_string(da);
     res += ", message = \"" + clear_new_line(message_data) + "\")";
 
@@ -189,22 +190,33 @@ int main(int argc , char* argv[]) {
         FD_ZERO(&read_fds);
         FD_SET(system_fd , &read_fds);
         FD_SET(system_read_pipe_fd , &read_fds);
-        int res = select(system_fd + 1 , &read_fds , NULL , NULL , NULL);
+        int max_fd = max(system_fd, system_read_pipe_fd);
+        int res = select(max_fd + 1, &read_fds , NULL , NULL , NULL);
         if(res < 0)
             cout << "Error occured in select..." << endl;
         
+        // cout << system_info() << ": Event occured" << '\n';
+
         if(FD_ISSET(system_fd , &read_fds)){
             char message[MESSAGE_SIZE];
             bzero(message , MESSAGE_SIZE);
-            read(system_fd , message , MESSAGE_SIZE);
-            cout << string(message) << endl;
+            int res = read(system_fd , message , MESSAGE_SIZE);
+            if (res == 0) {
+                cout << system_info() << ": PANIC! Read EOF on descriptor!" << endl;
+                abort();
+            }
+            // cout << string(message) << endl;
             ethernet_frame_decoder(string(message), system_write_pipe_fd , system_read_pipe_fd);
         }
         if(FD_ISSET(system_read_pipe_fd , &read_fds)){
             char message[MESSAGE_SIZE];
             bzero(message , MESSAGE_SIZE);
-            read(system_read_pipe_fd , message , MESSAGE_SIZE);
-            cout << string(message) << endl;
+            int res = read(system_read_pipe_fd , message , MESSAGE_SIZE);
+            if (res == 0) {
+                cout << system_info() << ": PANIC! Read EOF on descriptor!" << endl;
+                abort();
+            }
+            // cout << string(message) << endl;
             ethernet_frame_decoder(string(message), system_write_pipe_fd , system_read_pipe_fd);
         }
     }
