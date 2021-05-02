@@ -1,3 +1,5 @@
 MySwitch 12 1
 MySwitch 12 2
 ConnectSwitchSwitch 1 10 2 10
+MySystem 3
+ConnectSwitchSystem 3 2 9

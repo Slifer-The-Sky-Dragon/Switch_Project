@@ -16,6 +16,10 @@
 
 #define MAIN_MESSAGE 0
 
+#define MAIN_TYPE "00"
+#define MESSAGE_TYPE "01"
+#define CONFIG_TYPE "10"
+
 #define NEW_SWITCH "MySwitch"
 #define NEW_SYSTEM "MySystem"
 #define CONNECT_SWITCH_SYSTEM "ConnectSwitchSystem"
