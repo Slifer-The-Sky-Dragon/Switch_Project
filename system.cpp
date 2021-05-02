@@ -18,6 +18,8 @@ using namespace std;
 
 typedef enum {EXEC_NAME , SYSTEM_ID} Argv_Indexes;
 
+#define SFD "$"
+
 #define EMPTY ""
 #define MAIN_TYPE "00"
 #define MESSAGE_TYPE "01"
@@ -29,9 +31,16 @@ typedef enum {EXEC_NAME , SYSTEM_ID} Argv_Indexes;
 #define SA_IND 7
 #define DA_SA_LEN 6
 
+#define MAIN_MESSAGE 0
+#define SYSTEM_MESSAGE 1
+
 const int MESSAGE_SIZE = 1500;
 
 int system_id;
+
+string system_info() {
+    return "SYSTEM(ID = " + to_string(system_id) + ")";
+}
 
 int find_int_value(string a , int st , int length){
     string temp = EMPTY;
@@ -49,6 +58,23 @@ string find_message_data(string message){
     return result;
 }
 
+string extend_string_length(string a , int final_length){
+    string result;
+    for(int i = 0 ; i < final_length - a.size() ; i++){
+        result += "0";
+    }
+    result += a;
+    return result;
+}
+
+string convert_to_ehternet_frame(int da , int sa , string message_type , string data){
+    string result = EMPTY;
+
+    result = SFD + extend_string_length(to_string(da) , 6) + extend_string_length(to_string(sa) , 6) +
+                         message_type + data + "\n";
+    return result;
+}
+
 void main_command_handler(string message_data , int& switch_pipe_fd){
     stringstream ss(message_data);
     string command;
@@ -63,13 +89,50 @@ void main_command_handler(string message_data , int& switch_pipe_fd){
             abort();
         }
 
-        string res = "SYSTEM";
-        res += "(ID = " + to_string(system_id) + ")";
+        string res = "";
+        res += system_info();
         res += ": Connected to switch ";
         res += "(pipe_name = " + pipe_name;
         res += ")";
         cout << res << endl;
     }
+
+    if(command == "S"){
+        int da;
+        string message_body;
+        ss >> da;
+        getline(ss, message_body);
+        string frame = convert_to_ehternet_frame(da , system_id , MESSAGE_TYPE , message_body);
+        write(switch_pipe_fd , frame.c_str() , frame.size());
+        
+        string res = "";
+        res += system_info();
+        res += ": Sent message ";
+        res += "(dest = " + to_string(da);
+        res += ", message = \"" + message_body + "\")";
+    
+        cout << res << endl;
+    }
+}
+
+string clear_new_line(string in){
+    string res = "";
+    for (size_t i = 0 ; i < in.size() ; i++)
+        if(in[i] != '\n')
+            res += in[i];
+
+    return res;
+}
+
+void message_command_handler(int da , int sa , string message_data){
+    string res = "";
+    res += system_info();
+    res += ": Received message ";
+    res += " (source = " + to_string(sa);
+    res += ", dest = " + to_string(da);
+    res += ", message = \"" + clear_new_line(message_data) + "\")";
+
+    cout << res << endl;
 }
 
 void system_command_handler(int da , int sa , string message_type ,
@@ -77,6 +140,9 @@ void system_command_handler(int da , int sa , string message_type ,
 
     if(message_type == MAIN_TYPE)
         main_command_handler(message_data , switch_pipe_fd);
+
+    if(message_type == MESSAGE_TYPE)
+        message_command_handler(da , sa , message_data);
 }
 
 void ethernet_frame_decoder(string message , int& switch_pipe_fd){
