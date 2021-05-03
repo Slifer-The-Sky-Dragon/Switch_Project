@@ -189,7 +189,8 @@ int main(int argc , char* argv[]) {
     while(true){
         FD_ZERO(&read_fds);
         FD_SET(system_fd , &read_fds);
-        FD_SET(system_read_pipe_fd , &read_fds);
+        if(system_read_pipe_fd != -1)
+            FD_SET(system_read_pipe_fd , &read_fds);
         int max_fd = max(system_fd, system_read_pipe_fd);
         int res = select(max_fd + 1, &read_fds , NULL , NULL , NULL);
         if(res < 0)

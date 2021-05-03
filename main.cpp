@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <sys/wait.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <map>
 
 #define EMPTY ""
