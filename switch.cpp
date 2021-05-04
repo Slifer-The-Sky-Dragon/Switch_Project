@@ -18,8 +18,11 @@ using namespace std;
 #define EMPTY ""
 #define MAIN_TYPE "00"
 #define MESSAGE_TYPE "01"
-#define FILE_TYPE "10"
 #define CONFIG_TYPE "11"
+
+#define FILE_START_TYPE "FS"
+#define FILE_LINE_TYPE "FL"
+#define FILE_END_TYPE "FE"
 
 #define SFD "$"
 
@@ -139,7 +142,7 @@ void message_command_handler(string raw_message , int received_fd, int main_swit
         res += "(source = " + to_string(sa);
         res += ", dest = " + to_string(da);
         res += ")";
-        sleep(1);
+        // sleep(1);
         cout << res << '\n';
     }
     else{
@@ -154,7 +157,7 @@ void message_command_handler(string raw_message , int received_fd, int main_swit
             res += ", dest = " + to_string(da);
             res += ", fd = " + to_string(all_write_fd[i]);
             res += ")";
-            sleep(1);
+            // sleep(1);
             cout << res << '\n';
         }
     }
@@ -166,7 +169,9 @@ void switch_command_handler(int received_fd, int main_switch_fd, string raw_mess
                             map < int , int >& read_fd_to_write_fd){
     if(message_type == MAIN_TYPE)
         main_command_handler(message_data, port_to_write_fd, system_to_port, all_read_fd , all_write_fd , read_fd_to_write_fd);
-    if(message_type == MESSAGE_TYPE)
+    
+    else if(message_type == CONFIG_TYPE) {}
+    else
         message_command_handler(raw_message , received_fd , main_switch_fd , da , sa , message_data , port_to_write_fd ,
                                  system_to_port , all_read_fd , all_write_fd , read_fd_to_write_fd);
 }

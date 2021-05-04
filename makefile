@@ -12,5 +12,8 @@ switch: switch.cpp
 system: system.cpp
 	$(CC) $(CC_ARGS) system.cpp -o system
 
-clean:
-	rm -rf *.o *.out main switch system fifo_*
+clean: saaf
+	rm -rf *.o *.out main switch system
+
+saaf:
+	rm -f fifo_* file_*
