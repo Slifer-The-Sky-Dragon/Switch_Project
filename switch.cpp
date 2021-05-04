@@ -23,6 +23,7 @@ using namespace std;
 #define FILE_START_TYPE "FS"
 #define FILE_LINE_TYPE "FL"
 #define FILE_END_TYPE "FE"
+#define RECEIVE_TYPE "RE"
 
 #define SFD "$"
 
@@ -131,8 +132,6 @@ void message_command_handler(string raw_message , int received_fd, int main_swit
 
     system_to_write_port[sa] = read_fd_to_write_fd[received_fd];
 
-    // string framed_message = convert_to_ehternet_frame(da , sa, MESSAGE_TYPE , raw_message);
-
     if(system_to_write_port.find(da) != system_to_write_port.end()){
         int dest_write_fd = system_to_write_port[da];
         write(dest_write_fd , raw_message.c_str() , raw_message.size());
@@ -142,7 +141,6 @@ void message_command_handler(string raw_message , int received_fd, int main_swit
         res += "(source = " + to_string(sa);
         res += ", dest = " + to_string(da);
         res += ")";
-        // sleep(1);
         cout << res << '\n';
     }
     else{
@@ -157,7 +155,6 @@ void message_command_handler(string raw_message , int received_fd, int main_swit
             res += ", dest = " + to_string(da);
             res += ", fd = " + to_string(all_write_fd[i]);
             res += ")";
-            // sleep(1);
             cout << res << '\n';
         }
     }
@@ -193,7 +190,6 @@ void ethernet_frame_decoder(string message, int received_fd, int main_switch_fd,
 
 int main(int argc , char* argv[]) {
     switch_id = atoi(argv[SWITCH_ID]);
-    // int port_cnt = atoi(argv[PORT_CNT]);
     cout << "New Switch has been created..." << endl;
 
     Port2Fd port_to_write_fd;
@@ -219,7 +215,6 @@ int main(int argc , char* argv[]) {
             FD_SET(all_read_fd[i] , &read_fds);
             max_fd = max(all_read_fd[i] , max_fd);
         }
-        // cout << "hi" << endl;
         int res = select(max_fd + 1 , &read_fds , NULL , NULL , NULL);
         if(res < 0)
             cout << "Error occured in select..." << endl;
@@ -233,7 +228,6 @@ int main(int argc , char* argv[]) {
                     cout << switch_info() << ": PANIC! Read EOF on descriptor!" << endl;
                     abort();
                 }
-                // cout << string(message) << endl;
                 ethernet_frame_decoder(string(message), all_read_fd[i] , main_switch_fd , port_to_write_fd , 
                                         system_to_port , all_read_fd , all_write_fd , read_fd_to_write_fd);
             }

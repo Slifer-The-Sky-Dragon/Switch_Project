@@ -27,6 +27,7 @@
 #define CONNECT_SWITCH_SWITCH "ConnectSwitchSwitch"
 #define SEND_MESSAGE "SendMessage"
 #define SEND_FILE "SendFile"
+#define RECV_FILE "RecieveFile"
 
 char SWITCH_EXEC[] = { "./switch" };
 char SYSTEM_EXEC[] = { "./system" };
@@ -194,6 +195,22 @@ void send_file_command_handler(stringstream& ss, map < string , int >& fifo_to_f
     }
 }
 
+void recv_file_command_handler(stringstream& ss , map < string , int >& fifo_to_fd){
+    int system_id1 , system_id2;
+    string file_name;
+
+    ss >> system_id1 >> system_id2 >> file_name;
+
+    string system1_data = "R " + to_string(system_id2) + " " + file_name;
+    string system1_message = convert_to_ehternet_frame(0 , 0 , MAIN_MESSAGE , system1_data);
+
+    string system1_pipe_name = FIFO_PREFIX + "mss" + to_string(system_id1);   
+
+    if(fifo_to_fd.find(system1_pipe_name) != fifo_to_fd.end()){
+        write(fifo_to_fd[system1_pipe_name] , system1_message.c_str() , system1_message.size());
+    }    
+}
+
 void command_handler(string command , 
                      vector<ID>& switch_indexes ,
                      vector<ID>& system_indexes , 
@@ -214,7 +231,8 @@ void command_handler(string command ,
         send_message_command_handler(ss , fifo_to_fd);
     else if(command_type == SEND_FILE)
         send_file_command_handler(ss, fifo_to_fd);
-
+    else if(command_type == RECV_FILE)
+        recv_file_command_handler(ss , fifo_to_fd);
 }
 
 int main(){

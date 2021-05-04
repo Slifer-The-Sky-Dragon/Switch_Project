@@ -9,3 +9,4 @@ ConnectSwitchSystem 3 5 3
 ConnectSwitchSwitch 4 4 5 5
 SendMessage 1 2 salam haji!
 SendFile 2 1 fileshare.txt
+RecieveFile 1 2 file_ss1_fileshare.txt

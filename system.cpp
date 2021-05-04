@@ -29,6 +29,7 @@ typedef enum {EXEC_NAME , SYSTEM_ID} Argv_Indexes;
 #define FILE_START_TYPE "FS"
 #define FILE_LINE_TYPE "FL"
 #define FILE_END_TYPE "FE"
+#define RECEIVE_TYPE "RE"
 
 #define NOT_DEFINED -1
 #define DA_IND 1
@@ -38,6 +39,7 @@ typedef enum {EXEC_NAME , SYSTEM_ID} Argv_Indexes;
 #define MAIN_MESSAGE 0
 #define SYSTEM_MESSAGE 1
 
+const int DELAY = 10000;
 const int MESSAGE_SIZE = 1500;
 const string FILE_PREFIX = "file_";
 
@@ -80,119 +82,124 @@ string convert_to_ehternet_frame(int da , int sa , string message_type , string 
     return result;
 }
 
+void main_connect_command_handler(stringstream& ss , int& system_write_pipe_fd , int& system_read_pipe_fd){
+    string pipe_name1 , pipe_name2;
+    ss >> pipe_name1 >> pipe_name2;
+    system_read_pipe_fd = open(pipe_name2.c_str(), O_RDWR);
+    system_write_pipe_fd = open(pipe_name1.c_str(), O_RDWR);
+    
+    if(system_write_pipe_fd < 0 || system_read_pipe_fd < 0){
+        perror("open");
+        abort();
+    }
+
+    string res = "";
+    res += system_info();
+    res += ": Connected to switch ";
+    res += "(read_fd = " + to_string(system_read_pipe_fd);
+    res += ", write_fd = " + to_string(system_write_pipe_fd);
+    res += ")";
+    cout << res << endl;
+}
+
+void main_send_command_handler(stringstream& ss , int system_write_pipe_fd){
+    int da;
+    string message_body = EMPTY;
+    ss >> da;
+
+    string line;
+    bool check = false;
+    while(ss >> line){
+        if(check == true)
+            message_body += " ";
+        message_body += line;
+        check = true;
+    }
+    
+    string frame = convert_to_ehternet_frame(da , system_id , MESSAGE_TYPE , message_body);
+    write(system_write_pipe_fd , frame.c_str() , frame.size());
+    
+    string res = "";
+    res += system_info();
+    res += ": Sent message ";
+    res += "(write_fd = " + to_string(system_write_pipe_fd);
+    res += ", dest = " + to_string(da);
+    res += ", message = \"" + message_body + "\")";
+
+    cout << res << endl;
+}
+
+void main_file_command_handler(stringstream& ss , int system_write_pipe_fd){
+    int da;
+    string file_name;
+    ss >> da >> file_name;
+
+    ifstream file(file_name);
+    string file_line;
+    vector<string> lines;
+    while(getline(file, file_line))
+        lines.push_back(file_line);
+
+    string file_start_data = file_name;
+    string file_start_frame = convert_to_ehternet_frame(da , system_id ,
+                                FILE_START_TYPE , file_start_data);
+
+    write(system_write_pipe_fd, file_start_frame.c_str(), file_start_frame.size());
+
+    usleep(DELAY);
+    for(size_t i = 0; i < lines.size(); i++){
+        string file_line_data = file_name + " " + lines[i];
+        string file_line_frame = convert_to_ehternet_frame(da , system_id ,
+                                FILE_LINE_TYPE , file_line_data);
+
+        write(system_write_pipe_fd, file_line_frame.c_str(), file_line_frame.size());
+
+        usleep(DELAY);
+    }
+
+    string file_end_data = file_name;
+    string file_end_frame = convert_to_ehternet_frame(da , system_id ,
+                                FILE_END_TYPE , file_end_data);
+    
+    write(system_write_pipe_fd, file_end_frame.c_str(), file_end_frame.size());        
+
+    usleep(DELAY);
+    file.close();
+}
+
+void main_receive_command_handler(stringstream& ss , int system_write_pipe_fd){
+    int da;
+    string file_name;
+
+    ss >> da >> file_name;
+    
+    string message_body = file_name;
+    string frame = convert_to_ehternet_frame(da , system_id , RECEIVE_TYPE , message_body);
+    write(system_write_pipe_fd , frame.c_str() , frame.size());
+    
+    string res = "";
+    res += system_info();
+    res += ": Sent Requested File ";
+    res += "(write_fd = " + to_string(system_write_pipe_fd);
+    res += ", dest = " + to_string(da);
+    res += ", file_name = \"" + message_body + "\")";
+
+    cout << res << endl;
+}
+
 void main_command_handler(string message_data , int& system_write_pipe_fd , int& system_read_pipe_fd){
     stringstream ss(message_data);
     string command;
     ss >> command;
 
-    if(command == "C"){
-        string pipe_name1 , pipe_name2;
-        ss >> pipe_name1 >> pipe_name2;
-        system_read_pipe_fd = open(pipe_name2.c_str(), O_RDWR);
-        system_write_pipe_fd = open(pipe_name1.c_str(), O_RDWR);
-        
-        if(system_write_pipe_fd < 0 || system_read_pipe_fd < 0){
-            perror("open");
-            abort();
-        }
-
-        string res = "";
-        res += system_info();
-        res += ": Connected to switch ";
-        res += "(read_fd = " + to_string(system_read_pipe_fd);
-        res += ", write_fd = " + to_string(system_write_pipe_fd);
-        res += ")";
-        cout << res << endl;
-    }
-
-    if(command == "S"){
-        int da;
-        string message_body = EMPTY;
-        ss >> da;
-
-        string line;
-        bool check = false;
-        while(ss >> line){
-            if(check == true)
-                message_body += " ";
-            message_body += line;
-            check = true;
-        }
-        
-        string frame = convert_to_ehternet_frame(da , system_id , MESSAGE_TYPE , message_body);
-        write(system_write_pipe_fd , frame.c_str() , frame.size());
-        
-        string res = "";
-        res += system_info();
-        res += ": Sent message ";
-        res += "(write_fd = " + to_string(system_write_pipe_fd);
-        res += ", dest = " + to_string(da);
-        res += ", message = \"" + message_body + "\")";
-    
-        cout << res << endl;
-    }
-
-    if(command == "F"){
-        int da;
-        string file_name;
-        ss >> da >> file_name;
-
-        ifstream file(file_name);
-        string file_line;
-        vector<string> lines;
-        while(getline(file, file_line))
-            lines.push_back(file_line);
-
-        string file_start_data = file_name;
-        string file_start_frame = convert_to_ehternet_frame(da , system_id ,
-                                    FILE_START_TYPE , file_start_data);
-        // file_start_frame += '\n';
-        write(system_write_pipe_fd, file_start_frame.c_str(), file_start_frame.size());
-        
-        string res = "";
-        res += system_info();
-        res += ": Sent file start ";
-        res += "(write_fd = " + to_string(system_write_pipe_fd);
-        res += ", dest = " + to_string(da);
-        res += ", message = \"" + file_start_data + "\")";
-
-        cout << res << endl;
-        usleep(1000);
-        for(size_t i = 0; i < lines.size(); i++){
-            // "$<header><da><sa><file_type><filename> <line>";
-            string file_line_data = file_name + " " + lines[i];
-            string file_line_frame = convert_to_ehternet_frame(da , system_id ,
-                                    FILE_LINE_TYPE , file_line_data);
-            // file_line_frame += '\n';
-            write(system_write_pipe_fd, file_line_frame.c_str(), file_line_frame.size());
-            string res = "";
-            res += system_info();
-            res += ": Sent file line ";
-            res += "(write_fd = " + to_string(system_write_pipe_fd);
-            res += ", dest = " + to_string(da);
-            res += ", message = \"" + file_line_data + "\")";
-
-            cout << res << endl;
-            usleep(1000);
-        }
-
-        string file_end_data = file_name;
-        string file_end_frame = convert_to_ehternet_frame(da , system_id ,
-                                    FILE_END_TYPE , file_end_data);
-        
-        write(system_write_pipe_fd, file_end_frame.c_str(), file_end_frame.size());        
-        
-        res = "";
-        res += system_info();
-        res += ": Sent file end ";
-        res += "(write_fd = " + to_string(system_write_pipe_fd);
-        res += ", dest = " + to_string(da);
-        res += ", message = \"" + file_end_data + "\")";
-
-        cout << res << endl;
-        usleep(1000);
-        file.close();
-    }
+    if(command == "C")
+        main_connect_command_handler(ss , system_write_pipe_fd , system_read_pipe_fd);
+    else if(command == "S")
+        main_send_command_handler(ss , system_write_pipe_fd);
+    else if(command == "F")
+        main_file_command_handler(ss , system_write_pipe_fd);
+    else if(command == "R")
+        main_receive_command_handler(ss , system_write_pipe_fd);
 }
 
 string clear_new_line(string in){
@@ -219,13 +226,6 @@ void file_start_command_handler(int da , int sa , string message_data){
     string file_name = FILE_PREFIX + "ss" + to_string(system_id) + "_" + clear_new_line(message_data);
     ofstream file(file_name);
     file.close();
-
-    string res = "";
-    res += system_info();
-    res += ": File created ";
-    res += "(file_name = \"" + file_name + "\")";
-
-    cout << res << endl;
 }
 
 void file_line_command_handler(int da , int sa , string message_data){
@@ -246,32 +246,84 @@ void file_line_command_handler(int da , int sa , string message_data){
     ofstream file(file_name, ios_base::app);
     file << line << endl;
     file.close();
+}
+
+void file_end_command_handler(int da , int sa , string message_data){
+    string file_name = clear_new_line(message_data);
 
     string res = "";
     res += system_info();
-    res += ": File updated ";
-    res += "(file_name = \"" + file_name + "\"";
-    res += ", line = \"" + line + "\"";
-    res += ")";
+    res += ": Received message ";
+    res += "(source = " + to_string(sa);
+    res += ", dest = " + to_string(da);
+    res += ", Downloaded file name = \"" + file_name + "\")";
 
     cout << res << endl;
 }
 
+void receive_file_command_handler(int da , int sa , string file_name , int system_write_pipe_fd){
+    string res = "";
+    res += system_info();
+    res += ": Received message ";
+    res += "(source = " + to_string(sa);
+    res += ", dest = " + to_string(da);
+    res += ", message = \" Receive message! \")";
+
+    cout << res << endl;
+
+    swap(da , sa);
+
+    file_name = clear_new_line(file_name);
+    ifstream file(file_name);
+    string file_line;
+    vector<string> lines;
+    while(getline(file, file_line))
+        lines.push_back(file_line);
+
+    string file_start_data = file_name;
+    string file_start_frame = convert_to_ehternet_frame(da , system_id ,
+                                FILE_START_TYPE , file_start_data);
+
+    write(system_write_pipe_fd, file_start_frame.c_str(), file_start_frame.size());
+
+    usleep(DELAY);
+    for(size_t i = 0; i < lines.size(); i++){
+        string file_line_data = file_name + " " + lines[i];
+        string file_line_frame = convert_to_ehternet_frame(da , system_id ,
+                                FILE_LINE_TYPE , file_line_data);
+        write(system_write_pipe_fd, file_line_frame.c_str(), file_line_frame.size());
+        usleep(DELAY);
+    }
+
+    string file_end_data = file_name;
+    string file_end_frame = convert_to_ehternet_frame(da , system_id ,
+                                FILE_END_TYPE , file_end_data);
+    
+    write(system_write_pipe_fd, file_end_frame.c_str(), file_end_frame.size());        
+
+    usleep(DELAY);
+    file.close();
+}
+
 void system_command_handler(int da , int sa , string message_type ,
                             string message_data , int& system_write_pipe_fd , int& system_read_pipe_fd){
+
     if(message_type == MAIN_TYPE)
         main_command_handler(message_data , system_write_pipe_fd , system_read_pipe_fd);
 
-    else if(message_type == MESSAGE_TYPE)
+    else if(da == system_id && message_type == MESSAGE_TYPE)
         message_command_handler(da , sa , message_data);
 
-    else if(message_type == FILE_START_TYPE)
+    else if(da == system_id && message_type == FILE_START_TYPE)
         file_start_command_handler(da , sa , message_data);
     
-    else if(message_type == FILE_LINE_TYPE)
+    else if(da == system_id && message_type == FILE_LINE_TYPE)
         file_line_command_handler(da , sa , message_data);
 
-    else if(message_type == FILE_END_TYPE) {}
+    else if(da == system_id && message_type == FILE_END_TYPE)
+        file_end_command_handler(da , sa , message_data);
+    else if(da == system_id && message_type == RECEIVE_TYPE)
+        receive_file_command_handler(da , sa , message_data , system_write_pipe_fd);
 }
 
 void ethernet_frame_decoder(string message , int& system_write_pipe_fd , int& system_read_pipe_fd){
@@ -312,8 +364,6 @@ int main(int argc , char* argv[]) {
         if(res < 0)
             cout << "Error occured in select..." << endl;
         
-        // cout << system_info() << ": Event occured" << '\n';
-
         if(FD_ISSET(system_fd , &read_fds)){
             char message[MESSAGE_SIZE];
             bzero(message , MESSAGE_SIZE);
@@ -322,7 +372,6 @@ int main(int argc , char* argv[]) {
                 cout << system_info() << ": PANIC! Read EOF on descriptor!" << endl;
                 abort();
             }
-            // cout << string(message) << endl;
             ethernet_frame_decoder(string(message), system_write_pipe_fd , system_read_pipe_fd);
         }
         if(FD_ISSET(system_read_pipe_fd , &read_fds)){
@@ -333,7 +382,6 @@ int main(int argc , char* argv[]) {
                 cout << system_info() << ": PANIC! Read EOF on descriptor!" << endl;
                 abort();
             }
-            // cout << string(message) << endl;
             ethernet_frame_decoder(string(message), system_write_pipe_fd , system_read_pipe_fd);
         }
     }
