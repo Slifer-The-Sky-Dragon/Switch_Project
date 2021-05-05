@@ -32,4 +32,4 @@ SpanningTreeProtocol
 SetParents
 PrintInfo
 RecieveFile 1 5 fileshare.txt
-RecieveFile 3 1 file_ss1_fileshare.txt
+RecieveFile 5 4 file_ss1_fileshare.txt

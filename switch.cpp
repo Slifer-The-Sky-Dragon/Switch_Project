@@ -141,7 +141,7 @@ void main_print_message_handler(){
         res += to_string(switch_children[i]) + " ";
     }
     if(switch_children.size() == 0)
-        res += "No Childrean";
+        res += "No Children";
     cout << res << endl;
 }
 
