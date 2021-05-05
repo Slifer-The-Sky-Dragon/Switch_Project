@@ -28,6 +28,9 @@
 #define SEND_MESSAGE "SendMessage"
 #define SEND_FILE "SendFile"
 #define RECV_FILE "RecieveFile"
+#define CFG_STP "SpanningTreeProtocol"
+#define SET_PAR "SetParents"
+#define PRINT_INFO "PrintInfo"
 
 char SWITCH_EXEC[] = { "./switch" };
 char SYSTEM_EXEC[] = { "./system" };
@@ -123,7 +126,7 @@ void connect_switch_system_command_handler(stringstream& ss , map < string , int
     mkfifo(pipe_name1.c_str() , 0666);
     mkfifo(pipe_name2.c_str() , 0666);
 
-    string switch_data = "C " + to_string(port_number) + " " + pipe_name1 + " " + pipe_name2;
+    string switch_data = "CSS " + to_string(port_number) + " " + pipe_name1 + " " + pipe_name2;
     string system_data = "C " + pipe_name2 + " " + pipe_name1;
 
     string switch_message = convert_to_ehternet_frame(0 , 0 , MAIN_MESSAGE , switch_data);
@@ -211,6 +214,37 @@ void recv_file_command_handler(stringstream& ss , map < string , int >& fifo_to_
     }    
 }
 
+void cfg_stp_command_handler(vector<ID> switch_indexes , map < string , int >& fifo_to_fd){
+    string data = "CONFIG";
+    string switch_message = convert_to_ehternet_frame(0 , 0 , MAIN_MESSAGE , data);
+    for(int i = 0 ; i < switch_indexes.size() ; i++){
+        string switch_id = switch_indexes[i];
+        string switch_pipe_name = FIFO_PREFIX + "ms" + switch_id;
+        write(fifo_to_fd[switch_pipe_name] , switch_message.c_str() , switch_message.size());
+    }
+}
+
+void set_parents_command_handler(vector<ID> switch_indexes , map < string , int >& fifo_to_fd){
+    string data = "SETPAR";
+    string switch_message = convert_to_ehternet_frame(0 , 0 , MAIN_MESSAGE , data);
+    for(int i = 0 ; i < switch_indexes.size() ; i++){
+        string switch_id = switch_indexes[i];
+        string switch_pipe_name = FIFO_PREFIX + "ms" + switch_id;
+        write(fifo_to_fd[switch_pipe_name] , switch_message.c_str() , switch_message.size());
+    }    
+}
+
+void print_info_command_handler(vector<ID> switch_indexes , map < string , int >& fifo_to_fd){
+    string data = "PRINT";
+    string switch_message = convert_to_ehternet_frame(0 , 0 , MAIN_MESSAGE , data);
+    for(int i = 0 ; i < switch_indexes.size() ; i++){
+        string switch_id = switch_indexes[i];
+        string switch_pipe_name = FIFO_PREFIX + "ms" + switch_id;
+        write(fifo_to_fd[switch_pipe_name] , switch_message.c_str() , switch_message.size());
+    }    
+}
+
+
 void command_handler(string command , 
                      vector<ID>& switch_indexes ,
                      vector<ID>& system_indexes , 
@@ -233,6 +267,12 @@ void command_handler(string command ,
         send_file_command_handler(ss, fifo_to_fd);
     else if(command_type == RECV_FILE)
         recv_file_command_handler(ss , fifo_to_fd);
+    else if(command_type == CFG_STP)
+        cfg_stp_command_handler(switch_indexes , fifo_to_fd);
+    else if(command_type == SET_PAR)
+        set_parents_command_handler(switch_indexes , fifo_to_fd);
+    else if(command_type == PRINT_INFO)
+        print_info_command_handler(switch_indexes , fifo_to_fd);
 }
 
 int main(){
